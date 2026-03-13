@@ -225,11 +225,56 @@ pub fn from_str(content: &str) -> Option<Config> {
 }
 
 pub fn from_env() -> Option<Config> {
-    from_str(
+    let mut o = serde_json::from_str::<Config>(
         env::var("SRV_CONF")
             .expect("can't load config from env `SRV_CONF")
             .as_str(),
     )
+    .unwrap();
+    o.hosts_map = HashMap::new();
+
+    for (idx, host) in o.hosts.iter_mut().enumerate() {
+        host.pos = idx;
+        if host.alias.is_empty() {
+            host.alias = host.name.clone();
+        }
+        if host.monthstart < 1 || host.monthstart > 31 {
+            host.monthstart = 1;
+        }
+        host.weight = 10000_u64 - idx as u64;
+        o.hosts_map.insert(host.name.clone(), host.clone());
+    }
+
+    for (idx, group) in o.hosts_group.iter_mut().enumerate() {
+        group.pos = idx;
+        group.weight = (10000 - (1 + idx) * 100) as u64;
+        o.hosts_group_map.insert(group.gid.clone(), group.clone());
+    }
+
+    if o.offline_threshold < 30 {
+        o.offline_threshold = 30;
+    }
+    if o.notify_interval < 30 {
+        o.notify_interval = 30;
+    }
+    if o.group_gc < 30 {
+        o.group_gc = 30;
+    }
+
+    if o.admin_user.is_none() || o.admin_user.as_ref()?.is_empty() {
+        o.admin_user = Some("admin".to_string());
+    }
+    if o.admin_pass.is_none() || o.admin_pass.as_ref()?.is_empty() {
+        o.admin_pass = Some(Uuid::new_v4().to_string());
+    }
+    if o.jwt_secret.is_none() || o.jwt_secret.as_ref()?.is_empty() {
+        o.jwt_secret = Some(Uuid::new_v4().to_string());
+    }
+
+    eprintln!("✨ admin_user: {}", o.admin_user.as_ref()?);
+    eprintln!("✨ admin_pass: {}", o.admin_pass.as_ref()?);
+
+    Some(o)
 }
 
 pub fn from_file(cfg: &str) -> Option<Config> {
